@@ -1,88 +1,62 @@
-# 🧠 ML Homework 53 — Forward va Backpropagation
+# Forward Pass and Backpropagation — From First Principles
 
-Neyron tarmoqning to'rt asosiy qadami bo'yicha uyga vazifa:
-**forward → loss → backward → yangilash**. Hisoblar qo'lda, NumPy'da va PyTorch'da bajarilgan.
+Implementation of the full neural-network training loop — **forward pass → loss → backward pass → parameter update** — at three levels of abstraction: analytical derivation by hand, a from-scratch NumPy MLP, and PyTorch autograd.
 
-## 📋 Mundarija
+## Contents
 
-| Qism | Mavzu | Asosiy natija |
+| Part | Topic | Key result |
 |---|---|---|
-| 1 | Qo'lda hisob: Korzinka filiali | ŷ = 300 dona, L = 1, gradientlar qo'lda topildi |
-| 2 | NumPy: aqlli uy kontrolleri (XOR) | Gradient check farqi ≈ 2.6·10⁻¹¹ |
-| 3 | PyTorch: Korzinka va Antarktida | Autograd qo'lda hisob bilan mos, test aniqligi 99.0% |
-| 4 | Ishdagi vaziyatlar | 5 ta amaliy savolga javob |
-| Bonus | NumPy'da 3 sinfli MLP (4 → 8 → 3) | Test aniqligi 99.0% |
+| 1 | Manual derivation of a 2-2-1 ReLU regression network | ŷ = 3.0, L = 1.0; dead ReLU unit identified |
+| 2 | NumPy MLP for XOR with numerical gradient check | Max abs gradient error ≈ 2.6e-11 |
+| 3 | PyTorch autograd validation and penguin classifier | Autograd matches manual gradients; 99.03% test accuracy |
+| 4 | Applied engineering scenarios | Linear collapse, dying ReLU, activation caching, feature scaling, divergence |
+| Bonus | 3-class MLP in pure NumPy | 99.03% test accuracy (target > 95%) |
 
-## ✍️ 1-qism. Qo'lda hisob
+## Results
 
-Korzinka filiali uchun 2 → 2 (ReLU) → 1 tarmoq: forward, MSE loss, backward va ikki xil η bilan yangilash.
+### Gradient verification
 
-| Savol | Javob |
+The analytical backward pass was validated two ways: against a central-difference numerical gradient (max abs difference 2.6e-11) and against PyTorch autograd (exact match on all parameters).
+
+### XOR — NumPy MLP
+
+| Experiment | Finding |
 |---|---|
-| Bashorat | z₁ = (3, −1), h = (3, 0), ŷ = 3 → **300 dona** |
-| Xato | L = (3 − 4)² = **1**, model sotuvni kam aytdi |
-| Gradientlar | ∂L/∂W₁ = [[−4, 0], [−2, 0]], ∂L/∂w₂ = (−6, 0). Ikkinchi neyron "o'lik" |
-| Ikki stajyor | Aziz (η = 0.05): L = 0.6084 · Dilnoza (η = 0.01): L = 0.4527 → **Dilnoza yaxshiroq** |
-| MSE va BCE | MSE = 1.67 (eng ko'p Sergeli) · BCE: 2.30 va 0.36 |
+| Learning rate (2,000 epochs) | lr = 0.1 fails to converge; lr ≥ 0.5 solves XOR |
+| Hidden width (5,000 epochs) | n_h = 1 collapses to OR; **n_h ≥ 2** required |
+| ReLU vs. sigmoid | ReLU reaches ~10× lower loss at every learning rate; sensitive to initialization (dead units) |
 
-<details>
-<summary>📷 Qo'lda yozilgan yechim (rasmlar)</summary>
+### Palmer Penguins — PyTorch (test accuracy)
 
-![1-qism, 1-bet](rasmlar/1-qism-1.jpg)
-![1-qism, 2-bet](rasmlar/1-qism-2.jpg)
-![1-qism, 3-bet](rasmlar/1-qism-3.jpg)
-![1-qism, 4-bet](rasmlar/1-qism-4.jpg)
-
-</details>
-
-## 🔢 2-qism. NumPy: XOR uchun MLP
-
-**2.2 — Learning rate (2000 epoch)**
-
-| lr | Loss | Bashorat | To'g'ri? |
-|---|---|---|---|
-| 0.1 | 0.6169 | [0 1 0 0] | ❌ |
-| 0.5 | 0.0140 | [0 1 1 0] | ✅ |
-| 1.0 | 0.0049 | [0 1 1 0] | ✅ |
-| 2.0 | 0.0020 | [0 1 1 0] | ✅ |
-| 5.0 | 0.0007 | [0 1 1 0] | ✅ |
-
-**2.3 — Yashirin neyronlar:** XOR uchun kamida **2 ta** neyron kerak (n_h = 1 da model OR ga o'xshab qoladi).
-
-**2.4 — ReLU va sigmoid:** ReLU har bir lr da sigmoid'dan past loss berdi (lr = 1.0: 0.0001 va 0.0016).
-
-## 🔥 3-qism. PyTorch
-
-**3.1 — Autograd:** `loss.backward()` qo'lda topilgan gradientlarni aynan takrorladi.
-
-**3.2 — Pingvinlar turini aniqlash (test aniqligi)**
-
-| hid \ lr | 0.01 | 0.1 | 1.0 |
+| hidden \ lr | 0.01 | 0.1 | 1.0 |
 |---|---|---|---|
 | 2 | 0.4369 | 0.8155 | 0.9806 |
 | 8 | 0.7961 | **0.9903** | 0.9903 |
 | 32 | 0.8641 | 0.9903 | 0.9903 |
 
-Tavsiya: **hid = 8, lr = 0.1**. `opt.zero_grad()` o'chirilganda gradientlar yig'ilib boradi va model noto'g'ri o'qitiladi.
+Selected configuration: **8 hidden units, lr = 0.1** — same accuracy as the 32-unit model with 4× fewer parameters in the hidden layer.
 
-## 💼 4-qism. Ishdagi vaziyatlar
+An ablation removing `optimizer.zero_grad()` shows gradient accumulation: training loss collapses to zero while the model becomes over-confident, despite unchanged test accuracy on this split.
 
-Aktivatsiyasiz qatlamlar, o'lik ReLU, forward qiymatlarini saqlash, scaler'ning ahamiyati va `loss = nan` sababi bo'yicha javoblar notebook ichida.
+## Repository structure
 
-## ⭐ Bonus. PyTorch'siz MLP
+```
+ML-Homework-53/
+├── ML_Homework_53.ipynb    # Full solution with executed outputs
+├── images/                 # Handwritten derivation for Part 1
+├── requirements.txt
+└── README.md
+```
 
-Faqat NumPy bilan 4 → 8 (ReLU) → 3 (softmax) tarmoq: loss 1.43 → 0.04, **test aniqligi 0.9903** (talab: > 0.95).
-
-## 🚀 Ishga tushirish
+## Reproducing
 
 ```bash
 pip install -r requirements.txt
 jupyter notebook ML_Homework_53.ipynb
 ```
 
-## 🛠 Texnologiyalar
+All experiments use fixed seeds (`numpy` seed 1 / 42, `torch.manual_seed(42)`, `random_state=42`), so results are deterministic.
+
+## Stack
 
 Python · NumPy · PyTorch · scikit-learn · seaborn
-
----
-*Muallif: Muhammadyusuf*
